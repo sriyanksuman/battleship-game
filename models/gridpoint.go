@@ -1,7 +1,5 @@
 package models
 
-import "fmt"
-
 type Point struct {
 	X int
 	Y int
@@ -20,12 +18,8 @@ func NewWater(x, y int) *Water {
 }
 
 func (w *Water) String() string {
-	if w.AssignedObject != nil && w.AssignedPlayer != nil {
-		label := "A"
-		if *w.AssignedPlayer == 2 {
-			label = "B"
-		}
-		return fmt.Sprintf("%s-%s", label, w.AssignedObject.ID)
+	if w.AssignedObject != nil {
+		return w.AssignedObject.ID
 	}
 	return "."
 }
