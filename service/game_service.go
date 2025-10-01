@@ -256,9 +256,8 @@ func (gs *GameService) PlayGame() {
 		previousPoint = models.Point{X: firingPosition.X, Y: firingPosition.Y}
 
 		if firingPosition.AssignedObject != nil {
-			fmt.Printf("Player%d's turn: Missile fired at (%d, %d). 'Hit'. Player%d's ship with id '%s' destroyed\n",
-				currentPlayer.ID, firingPosition.X, firingPosition.Y,
-				*firingPosition.AssignedPlayer, firingPosition.AssignedObject.ID)
+			fmt.Printf("Player%d's turn: Missile fired at (%d, %d) : \"Hit\" : %s destroyed",
+				currentPlayer.ID, firingPosition.X, firingPosition.Y, firingPosition.AssignedObject.ID)
 
 			destroyedShip := firingPosition.AssignedObject
 			gs.dfs(firingPosition.X, firingPosition.Y, destroyedShip)
@@ -267,17 +266,14 @@ func (gs *GameService) PlayGame() {
 			delete(player.ActiveBattleships, destroyedShip.ID)
 			firingPosition.AssignedObject = nil
 		} else {
-			fmt.Printf("Player%d's turn: Missile fired at (%d, %d). Miss\n",
+			fmt.Printf("Player%d's turn: Missile fired at (%d, %d) : \"Miss\"",
 				currentPlayer.ID, firingPosition.X, firingPosition.Y)
 		}
 
-		gs.currentIndex = (gs.currentIndex + 1) % len(gs.Players)
-		gs.Battlefield.PrintBattlefield()
+		fmt.Printf(" : Ships Remaining - PlayerA:%d, PlayerB:%d\n",
+			len(gs.PlayersMap[1].ActiveBattleships), len(gs.PlayersMap[2].ActiveBattleships))
 
-		for _, p := range gs.Players {
-			fmt.Println(p)
-		}
-		fmt.Println()
+		gs.currentIndex = (gs.currentIndex + 1) % len(gs.Players)
 	}
 
 	for _, player := range gs.Players {
@@ -304,14 +300,15 @@ func (gs *GameService) dfs(x, y int, ship *models.Battleship) {
 	gs.dfs(x, y-1, ship)
 }
 
-// Public API as per requirements
-// InitGame(N)
 func (gs *GameService) InitGameSize(n int) error { // alias to clear name
 	return gs.InitGameWithSize(n)
 }
 
-// AddShip(id,size,xA,yA,xB,yB)
 func (gs *GameService) AddShip(id string, size, xA, yA, xB, yB int) error {
+	if gs.Battlefield == nil {
+		return fmt.Errorf("game not initialized. Call InitGame first")
+	}
+	// Treat provided coordinates as center in internal grid (0,0 at top-left)
 	if err := gs.AddShipForPlayer("A-"+id, size, xA, yA, 1); err != nil {
 		return err
 	}
@@ -321,7 +318,6 @@ func (gs *GameService) AddShip(id string, size, xA, yA, xB, yB int) error {
 	return nil
 }
 
-// StartGame()
 func (gs *GameService) Start() error {
 	return gs.StartGame(string(enums.RandomFireStrategy))
 }
@@ -330,13 +326,11 @@ func (gs *GameService) isWithinPlayersHalf(playerID int, center models.Point, si
 	half := size / 2
 	topLeftX := center.X - half
 	topLeftY := center.Y - half
-	// Ensure entire square lies in player's half by checking all points
 	for i := topLeftX; i < topLeftX+size; i++ {
 		for j := topLeftY; j < topLeftY+size; j++ {
 			if j < 0 || j >= gs.Battlefield.N {
 				return false
 			}
-			// half split along Y
 			if playerID == 1 {
 				if j >= gs.Battlefield.N/2 {
 					return false
