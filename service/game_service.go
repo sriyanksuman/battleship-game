@@ -17,8 +17,8 @@ type GameInput struct {
 }
 
 type ShipInput struct {
-	Size        int   `json:"size"`
-	TopLeftEdge []int `json:"top_left_edge"`
+	Size   int   `json:"size"`
+	Center []int `json:"center"`
 }
 
 type GameService struct {
@@ -56,7 +56,6 @@ func (gs *GameService) InitGameWithSize(n int) error {
 	return nil
 }
 
-// AddShipForPlayer adds a ship for a single player (backward-compat internal helper)
 func (gs *GameService) AddShipForPlayer(shipID string, size, x, y, playerID int) error {
 	if gs.Battlefield == nil {
 		return fmt.Errorf("game not initialized. Call InitGame first")
@@ -73,13 +72,11 @@ func (gs *GameService) AddShipForPlayer(shipID string, size, x, y, playerID int)
 		return fmt.Errorf("player %d does not exist", playerID)
 	}
 
-	// validate ship lies within player's half
 	if !gs.isWithinPlayersHalf(playerID, center, size) {
 		return fmt.Errorf("ship placement center (%d,%d) size %d not within Player%d's half", x, y, size, playerID)
 	}
 
 	bs := models.NewBattleship(shipID, size, center)
-	// ensure no overlap
 	if err := gs.addBattleshipInGrid(bs); err != nil {
 		return err
 	}
@@ -89,7 +86,6 @@ func (gs *GameService) AddShipForPlayer(shipID string, size, x, y, playerID int)
 	return nil
 }
 
-// StartGame begins using configured strategy (defaults to Random)
 func (gs *GameService) StartGame(firingStrategyType string) error {
 	if gs.Battlefield == nil {
 		return fmt.Errorf("game not initialized. Call InitGame first")
@@ -178,8 +174,7 @@ func (gs *GameService) InitGame(path string) error {
 		fmt.Sscanf(playerIDStr, "%d", &playerID)
 
 		for shipIdx, ship := range ships {
-			// Backward compat: interpret top_left_edge as center if size==1, else shift to center by adding size/2
-			center := models.Point{X: ship.TopLeftEdge[0] + ship.Size/2, Y: ship.TopLeftEdge[1] + ship.Size/2}
+			center := models.Point{X: ship.Center[0] + ship.Size/2, Y: ship.Center[1] + ship.Size/2}
 			if models.ValidateBattleship(input.N, ship.Size, center) {
 				bs := models.NewBattleship(fmt.Sprintf("SH%d", shipIdx+1), ship.Size, center)
 				player := gs.PlayersMap[playerID]
@@ -204,7 +199,6 @@ func (gs *GameService) InitGame(path string) error {
 }
 
 func (gs *GameService) addBattleshipInGrid(battleship *models.Battleship) error {
-	// validate overlap
 	for point := range battleship.ShipPoints {
 		gridPoint := gs.Battlefield.Grid[point.X][point.Y]
 		if gridPoint.AssignedObject != nil {
@@ -308,11 +302,19 @@ func (gs *GameService) AddShip(id string, size, xA, yA, xB, yB int) error {
 	if gs.Battlefield == nil {
 		return fmt.Errorf("game not initialized. Call InitGame first")
 	}
-	// Treat provided coordinates as center in internal grid (0,0 at top-left)
-	if err := gs.AddShipForPlayer("A-"+id, size, xA, yA, 1); err != nil {
+	convertCenter := func(x, y int) (int, int) {
+		half := size / 2
+		row := (gs.Battlefield.N - 1 - y) + half
+		col := x
+		return row, col
+	}
+	ax, ay := convertCenter(xA, yA)
+	bx, by := convertCenter(xB, yB)
+
+	if err := gs.AddShipForPlayer("A-"+id, size, ax, ay, 1); err != nil {
 		return err
 	}
-	if err := gs.AddShipForPlayer("B-"+id, size, xB, yB, 2); err != nil {
+	if err := gs.AddShipForPlayer("B-"+id, size, bx, by, 2); err != nil {
 		return err
 	}
 	return nil
