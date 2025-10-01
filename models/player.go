@@ -6,7 +6,7 @@ type Player struct {
 	ID                int
 	Name              string
 	Battleships       []*Battleship
-	ActiveBattleships map[int]bool
+	ActiveBattleships map[string]bool
 }
 
 func NewPlayer(id int, name string) *Player {
@@ -14,7 +14,7 @@ func NewPlayer(id int, name string) *Player {
 		ID:                id,
 		Name:              name,
 		Battleships:       make([]*Battleship, 0),
-		ActiveBattleships: make(map[int]bool),
+		ActiveBattleships: make(map[string]bool),
 	}
 }
 
@@ -24,7 +24,7 @@ func (p *Player) AddBattleship(bs *Battleship) {
 }
 
 func (p *Player) String() string {
-	activeShips := make([]int, 0)
+	activeShips := make([]string, 0)
 	for shipID := range p.ActiveBattleships {
 		activeShips = append(activeShips, shipID)
 	}

@@ -21,10 +21,11 @@ func NewWater(x, y int) *Water {
 
 func (w *Water) String() string {
 	if w.AssignedObject != nil && w.AssignedPlayer != nil {
-		return fmt.Sprintf("Player%d-BS%d(%d,%d)", *w.AssignedPlayer, w.AssignedObject.ID, w.X, w.Y)
+		label := "A"
+		if *w.AssignedPlayer == 2 {
+			label = "B"
+		}
+		return fmt.Sprintf("%s-%s", label, w.AssignedObject.ID)
 	}
-	if w.AssignedPlayer != nil {
-		return fmt.Sprintf("Player%d(%d,%d)", *w.AssignedPlayer, w.X, w.Y)
-	}
-	return fmt.Sprintf("Water(%d,%d)", w.X, w.Y)
+	return "."
 }
