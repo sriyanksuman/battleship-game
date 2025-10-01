@@ -13,6 +13,7 @@ type FiringStrategy interface {
 type RandomFiringStrategy struct {
 	SampleSet []models.Point
 	rng       *rand.Rand
+	visited   map[models.Point]bool
 }
 
 func NewRandomFiringStrategy(sampleSet []models.Point) *RandomFiringStrategy {
@@ -20,6 +21,7 @@ func NewRandomFiringStrategy(sampleSet []models.Point) *RandomFiringStrategy {
 	return &RandomFiringStrategy{
 		SampleSet: sampleSet,
 		rng:       rand.New(source),
+		visited:   make(map[models.Point]bool),
 	}
 }
 
@@ -33,11 +35,10 @@ func (rfs *RandomFiringStrategy) Fire(currentPlayer *models.Player, battlefield 
 		j = rfs.SampleSet[index].Y
 		point = battlefield.Grid[i][j]
 
-		if (point.AssignedPlayer == nil || *point.AssignedPlayer != currentPlayer.ID) &&
-			!(i == previousPoint.X && j == previousPoint.Y) {
+		if (point.AssignedPlayer == nil || *point.AssignedPlayer != currentPlayer.ID) && !rfs.visited[models.Point{X: i, Y: j}] {
 			break
 		}
 	}
-
+	rfs.visited[models.Point{X: i, Y: j}] = true
 	return point
 }

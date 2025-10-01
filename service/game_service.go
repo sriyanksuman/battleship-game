@@ -56,15 +56,16 @@ func (gs *GameService) InitGameWithSize(n int) error {
 	return nil
 }
 
-func (gs *GameService) AddShip(shipID, size, x, y, playerID int) error {
+// AddShipForPlayer adds a ship for a single player (backward-compat internal helper)
+func (gs *GameService) AddShipForPlayer(shipID string, size, x, y, playerID int) error {
 	if gs.Battlefield == nil {
 		return fmt.Errorf("game not initialized. Call InitGame first")
 	}
 
-	topLeftEdge := models.Point{X: x, Y: y}
+	center := models.Point{X: x, Y: y}
 
-	if !models.ValidateBattleship(gs.Battlefield.N, size, topLeftEdge) {
-		return fmt.Errorf("invalid ship placement: ship at (%d,%d) with size %d exceeds battlefield boundaries", x, y, size)
+	if !models.ValidateBattleship(gs.Battlefield.N, size, center) {
+		return fmt.Errorf("invalid ship placement: center at (%d,%d) with size %d exceeds battlefield boundaries", x, y, size)
 	}
 
 	player, exists := gs.PlayersMap[playerID]
@@ -72,14 +73,23 @@ func (gs *GameService) AddShip(shipID, size, x, y, playerID int) error {
 		return fmt.Errorf("player %d does not exist", playerID)
 	}
 
-	bs := models.NewBattleship(shipID, size, topLeftEdge)
-	player.AddBattleship(bs)
-	gs.addBattleshipInGrid(bs)
+	// validate ship lies within player's half
+	if !gs.isWithinPlayersHalf(playerID, center, size) {
+		return fmt.Errorf("ship placement center (%d,%d) size %d not within Player%d's half", x, y, size, playerID)
+	}
 
-	fmt.Printf("Ship %d (size %d) added to Player%d at position (%d,%d)\n", shipID, size, playerID, x, y)
+	bs := models.NewBattleship(shipID, size, center)
+	// ensure no overlap
+	if err := gs.addBattleshipInGrid(bs); err != nil {
+		return err
+	}
+	player.AddBattleship(bs)
+
+	fmt.Printf("Ship %s (size %d) added to Player%d at position (%d,%d)\n", shipID, size, playerID, x, y)
 	return nil
 }
 
+// StartGame begins using configured strategy (defaults to Random)
 func (gs *GameService) StartGame(firingStrategyType string) error {
 	if gs.Battlefield == nil {
 		return fmt.Errorf("game not initialized. Call InitGame first")
@@ -167,15 +177,18 @@ func (gs *GameService) InitGame(path string) error {
 		var playerID int
 		fmt.Sscanf(playerIDStr, "%d", &playerID)
 
-		for shipID, ship := range ships {
-			topLeftEdge := models.Point{X: ship.TopLeftEdge[0], Y: ship.TopLeftEdge[1]}
-			if models.ValidateBattleship(input.N, ship.Size, topLeftEdge) {
-				bs := models.NewBattleship(shipID+1, ship.Size, topLeftEdge)
+		for shipIdx, ship := range ships {
+			// Backward compat: interpret top_left_edge as center if size==1, else shift to center by adding size/2
+			center := models.Point{X: ship.TopLeftEdge[0] + ship.Size/2, Y: ship.TopLeftEdge[1] + ship.Size/2}
+			if models.ValidateBattleship(input.N, ship.Size, center) {
+				bs := models.NewBattleship(fmt.Sprintf("SH%d", shipIdx+1), ship.Size, center)
 				player := gs.PlayersMap[playerID]
+				if err := gs.addBattleshipInGrid(bs); err != nil {
+					return fmt.Errorf("overlap while placing player %d ship %s: %v", playerID, bs.ID, err)
+				}
 				player.AddBattleship(bs)
-				gs.addBattleshipInGrid(bs)
 			} else {
-				return fmt.Errorf("ship input invalid for player %d, ship %d", playerID, shipID+1)
+				return fmt.Errorf("ship input invalid for player %d, ship %d", playerID, shipIdx+1)
 			}
 		}
 	}
@@ -190,11 +203,19 @@ func (gs *GameService) InitGame(path string) error {
 	return nil
 }
 
-func (gs *GameService) addBattleshipInGrid(battleship *models.Battleship) {
+func (gs *GameService) addBattleshipInGrid(battleship *models.Battleship) error {
+	// validate overlap
+	for point := range battleship.ShipPoints {
+		gridPoint := gs.Battlefield.Grid[point.X][point.Y]
+		if gridPoint.AssignedObject != nil {
+			return fmt.Errorf("ship %s overlaps at (%d,%d)", battleship.ID, point.X, point.Y)
+		}
+	}
 	for point := range battleship.ShipPoints {
 		gridPoint := gs.Battlefield.Grid[point.X][point.Y]
 		gridPoint.AssignedObject = battleship
 	}
+	return nil
 }
 
 func (gs *GameService) divideGridAmongPlayers(n int) {
@@ -223,7 +244,7 @@ func (gs *GameService) CheckGameEnd() bool {
 }
 
 func (gs *GameService) PlayGame() {
-	fmt.Println("\n=== Starting Battleship Game ===\n")
+	fmt.Println("\n=== Starting Battleship Game ===")
 	gs.Battlefield.PrintBattlefield()
 
 	previousPoint := models.Point{X: -1, Y: -1}
@@ -235,7 +256,7 @@ func (gs *GameService) PlayGame() {
 		previousPoint = models.Point{X: firingPosition.X, Y: firingPosition.Y}
 
 		if firingPosition.AssignedObject != nil {
-			fmt.Printf("Player%d's turn: Missile fired at (%d, %d). 'Hit'. Player%d's ship with id '%d' destroyed\n",
+			fmt.Printf("Player%d's turn: Missile fired at (%d, %d). 'Hit'. Player%d's ship with id '%s' destroyed\n",
 				currentPlayer.ID, firingPosition.X, firingPosition.Y,
 				*firingPosition.AssignedPlayer, firingPosition.AssignedObject.ID)
 
@@ -281,4 +302,51 @@ func (gs *GameService) dfs(x, y int, ship *models.Battleship) {
 	gs.dfs(x-1, y, ship)
 	gs.dfs(x, y+1, ship)
 	gs.dfs(x, y-1, ship)
+}
+
+// Public API as per requirements
+// InitGame(N)
+func (gs *GameService) InitGameSize(n int) error { // alias to clear name
+	return gs.InitGameWithSize(n)
+}
+
+// AddShip(id,size,xA,yA,xB,yB)
+func (gs *GameService) AddShip(id string, size, xA, yA, xB, yB int) error {
+	if err := gs.AddShipForPlayer("A-"+id, size, xA, yA, 1); err != nil {
+		return err
+	}
+	if err := gs.AddShipForPlayer("B-"+id, size, xB, yB, 2); err != nil {
+		return err
+	}
+	return nil
+}
+
+// StartGame()
+func (gs *GameService) Start() error {
+	return gs.StartGame(string(enums.RandomFireStrategy))
+}
+
+func (gs *GameService) isWithinPlayersHalf(playerID int, center models.Point, size int) bool {
+	half := size / 2
+	topLeftX := center.X - half
+	topLeftY := center.Y - half
+	// Ensure entire square lies in player's half by checking all points
+	for i := topLeftX; i < topLeftX+size; i++ {
+		for j := topLeftY; j < topLeftY+size; j++ {
+			if j < 0 || j >= gs.Battlefield.N {
+				return false
+			}
+			// half split along Y
+			if playerID == 1 {
+				if j >= gs.Battlefield.N/2 {
+					return false
+				}
+			} else {
+				if j < gs.Battlefield.N/2 {
+					return false
+				}
+			}
+		}
+	}
+	return true
 }
