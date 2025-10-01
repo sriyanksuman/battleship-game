@@ -1,0 +1,27 @@
+{
+  "n": 6,
+  "players": 2,
+  "playersToShips": {
+    "1": [
+      {
+      "size": 2,
+      "top_left_edge": [0,0]
+      },
+      {
+      "size": 2,
+      "top_left_edge": [4,0]
+      }
+    ],
+    "2": [
+      {
+      "size": 2,
+      "top_left_edge": [0,4]
+      },
+      {
+      "size": 2,
+      "top_left_edge": [4,4]
+      }
+    ]
+  },
+  "firingStrategy": "RandomFireStrategy"
+}
